@@ -118,7 +118,7 @@ def mutate_video(width, height, out=None):
                 out.write(frame_to_display)
 
             for event in pygame.event.get():
-                if event.type == KEYDOWN and event.key == pygame.K_q:
+                if event.type == KEYDOWN and event.key == pygame.K_SPACE:
                     return 0
                 for i, key in enumerate([pygame.K_3, pygame.K_2, pygame.K_1]):
                     if event.type == KEYDOWN and event.key == key:
@@ -157,7 +157,7 @@ def initial_run():
         display_frame(frame)
 
         for event in pygame.event.get():
-            if event.type == KEYDOWN and event.key == pygame.K_q:
+            if event.type == KEYDOWN and event.key == pygame.K_SPACE:
                 return 0
 
 initial_run()
