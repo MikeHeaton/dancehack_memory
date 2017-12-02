@@ -8,6 +8,7 @@ SAVE = None
 THRESHOLD_VAL = 170
 N_SECTIONS = 3
 FRAMES = 50
+ALPHA = 0.5
 ACTIVE = [True, True, True]
 
 def get_frame(webcam):
@@ -21,10 +22,10 @@ def get_frame(webcam):
 
 
 def combine(old_frame, new_frame):
-    alpha = 0.2
-    #new_frame = noisy("s&p", new_frame).astype(np.uint8)
-    return cv2.addWeighted(new_frame, alpha, old_frame, 1-alpha, 0.0)
 
+    #new_frame = noisy("s&p", new_frame).astype(np.uint8)
+    #return cv2.addWeighted(new_frame, alpha, old_frame, 1-alpha, 0.0)
+    return cv2.addWeighted(old_frame, ALPHA, new_frame, 1-ALPHA, 0.0)
 
 def noisy(noise_typ, image):
     if noise_typ == "gauss":
@@ -66,32 +67,36 @@ def noisy(noise_typ, image):
         return noisy
 
 
-def mutate_video(video, width, height, out=None):
-    all_video = video
-    cutoffs = [int(np.floor(i / N_SECTIONS * width)) for i in range(N_SECTIONS + 1)]
+def mutate_video(original_video, width, height, out=None):
+    video = original_video.copy()
+    cutoffs = [int(np.floor(i / N_SECTIONS * width))
+               for i in range(N_SECTIONS + 1)]
     while True:
         for t in range(FRAMES):
             next_frame = get_frame(webcam)
+            frame_to_display = np.zeros(shape=next_frame.shape)
+
             for i in range(N_SECTIONS):
                 if ACTIVE[i]:
                     part_old_frame = video[t, :, cutoffs[i]: cutoffs[i+1]]
                     part_new_frame = next_frame[:, cutoffs[i]: cutoffs[i+1]]
 
-                    video[t, :, cutoffs[i]: cutoffs[i+1]] = combine(part_old_frame, part_new_frame)
-
+                    this_bit = combine(part_old_frame, part_new_frame)
+                    video[t, :, cutoffs[i]: cutoffs[i+1]] = this_bit
+                    frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = this_bit
+                else:
+                    frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = original_video[t, :, cutoffs[i]: cutoffs[i+1]]
             # video[t] = combine(video[t], next_frame)
-            display_frame(video[t])
+            display_frame(frame_to_display)
 
             if out:
-                out.write(video[t])
-
-            key = cv2.waitKey(1) & 0xFF
+                out.write(frame_to_display)
 
             for event in pygame.event.get():
                 if event.type == KEYDOWN and event.key == pygame.K_q:
                     return 0
-                for i, key in enumerate([pygame.K_1, pygame.K_2, pygame.K_3]):
-                    if event.key == key:
+                for i, key in enumerate([pygame.K_3, pygame.K_2, pygame.K_1]):
+                    if event.type == KEYDOWN and event.key == key:
                         print("CHANGING")
                         ACTIVE[i] = not ACTIVE[i]
                         print(ACTIVE)
@@ -99,7 +104,7 @@ def mutate_video(video, width, height, out=None):
 
 def display_frame(frame):
     screen.fill([0,0,0])
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_BGR2RGB)
     frame = np.rot90(frame)
     frame = pygame.surfarray.make_surface(frame)
     screen.blit(frame, (0,0))
