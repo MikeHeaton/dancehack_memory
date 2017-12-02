@@ -25,7 +25,7 @@ def combine(old_frame, new_frame):
 
     #new_frame = noisy("s&p", new_frame).astype(np.uint8)
     #return cv2.addWeighted(new_frame, alpha, old_frame, 1-alpha, 0.0)
-    return cv2.addWeighted(old_frame, ALPHA, new_frame, 1-ALPHA, 0.0)
+    return cv2.addWeighted(old_frame, 1-ALPHA, new_frame, ALPHA, 0.0)
 
 def noisy(noise_typ, image):
     if noise_typ == "gauss":
@@ -67,12 +67,36 @@ def noisy(noise_typ, image):
         return noisy
 
 
-def mutate_video(original_video, width, height, out=None):
+def mutate_video(width, height, out=None):
+    # Capture original video
+    original_video = np.expand_dims(get_frame(webcam), 0)
+    print(original_video.shape)
+    video_list = []
+    while True:
+        #np.stack([get_frame(webcam) for _ in range(FRAMES)])
+        frame = get_frame(webcam)
+        display_frame(frame)
+        #original_video = np.append(original_video, np.expand_dims(frame, 0), axis=0)
+        video_list.append(frame)
+
+        def wait_for_space():
+            for event in pygame.event.get():
+                if event.type == KEYDOWN and event.key == pygame.K_SPACE:
+                    return True
+            return False
+
+        if wait_for_space():
+            break
+
+    # nframes = original_video.shape[0]
+    nframes = len(video_list)
+    original_video = np.stack(video_list, 0)
+    # original_video = np.stack([get_frame(webcam) for _ in range(FRAMES)])
     video = original_video.copy()
     cutoffs = [int(np.floor(i / N_SECTIONS * width))
                for i in range(N_SECTIONS + 1)]
     while True:
-        for t in range(FRAMES):
+        for t in range(nframes):
             next_frame = get_frame(webcam)
             frame_to_display = np.zeros(shape=next_frame.shape)
 
@@ -82,8 +106,9 @@ def mutate_video(original_video, width, height, out=None):
                     part_new_frame = next_frame[:, cutoffs[i]: cutoffs[i+1]]
 
                     this_bit = combine(part_old_frame, part_new_frame)
+                    frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = video[t, :, cutoffs[i]: cutoffs[i+1]]
                     video[t, :, cutoffs[i]: cutoffs[i+1]] = this_bit
-                    frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = this_bit
+
                 else:
                     frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = original_video[t, :, cutoffs[i]: cutoffs[i+1]]
             # video[t] = combine(video[t], next_frame)
@@ -138,13 +163,8 @@ def initial_run():
 initial_run()
 print("run ok")
 
-    #cv2.imshow("test", next_frame)
-    #frame = pygame.surfarray.make_surface(frame)
-    #if cv2.waitKey(1) & 0xFF == ord('q'):
-    #        break
 
-video = np.stack([get_frame(webcam) for _ in range(50)])
-out_obj = mutate_video(video, width, height, out_obj)
+out_obj = mutate_video(width, height, out_obj)
 
 
 """frame = (frame + next_frame)/2.0
