@@ -1,11 +1,13 @@
 import cv2
 import numpy as np
 import time
+import pygame
+from pygame.locals import *
 
 SAVE = None
 THRESHOLD_VAL = 170
 N_SECTIONS = 3
-FRAMES = 10
+FRAMES = 50
 ACTIVE = [True, True, True]
 
 def get_frame(webcam):
@@ -14,12 +16,12 @@ def get_frame(webcam):
                              THRESHOLD_VAL, 255,
                              cv2.THRESH_BINARY)"""
 
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return frame
 
 
 def combine(old_frame, new_frame):
-    alpha = 0.5
+    alpha = 0.2
     #new_frame = noisy("s&p", new_frame).astype(np.uint8)
     return cv2.addWeighted(new_frame, alpha, old_frame, 1-alpha, 0.0)
 
@@ -77,26 +79,39 @@ def mutate_video(video, width, height, out=None):
 
                     video[t, :, cutoffs[i]: cutoffs[i+1]] = combine(part_old_frame, part_new_frame)
 
-            #video[t] = combine(video[t], next_frame)
-            cv2.imshow('frame', video[t])
+            # video[t] = combine(video[t], next_frame)
+            display_frame(video[t])
+
             if out:
                 out.write(video[t])
 
             key = cv2.waitKey(1) & 0xFF
 
-            if key == ord('q'):
-                return out
-            for i in range(N_SECTIONS):
-                if key == ord(str(i+1)):
-                    print("CHANGING")
-                    ACTIVE[i] = not ACTIVE[i]
-                    print(ACTIVE)
+            for event in pygame.event.get():
+                if event.type == KEYDOWN and event.key == pygame.K_q:
+                    return 0
+                for i, key in enumerate([pygame.K_1, pygame.K_2, pygame.K_3]):
+                    if event.key == key:
+                        print("CHANGING")
+                        ACTIVE[i] = not ACTIVE[i]
+                        print(ACTIVE)
 
 
+def display_frame(frame):
+    screen.fill([0,0,0])
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = np.rot90(frame)
+    frame = pygame.surfarray.make_surface(frame)
+    screen.blit(frame, (0,0))
+    pygame.display.update()
 
 webcam = cv2.VideoCapture(0)
+pygame.init()
+pygame.display.set_caption("OpenCV camera stream on Pygame")
+screen = pygame.display.set_mode([1280,720], pygame.FULLSCREEN)
+
 img = get_frame(webcam)
-height, width = img.shape
+height, width, depth = img.shape
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
 
 if SAVE:
@@ -105,11 +120,23 @@ if SAVE:
 else:
     out_obj = None
 
-while True:
-    next_frame = get_frame(webcam)
-    cv2.imshow('frame', next_frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+def initial_run():
+    while True:
+        frame = get_frame(webcam)
+
+        display_frame(frame)
+
+        for event in pygame.event.get():
+            if event.type == KEYDOWN and event.key == pygame.K_q:
+                return 0
+
+initial_run()
+print("run ok")
+
+    #cv2.imshow("test", next_frame)
+    #frame = pygame.surfarray.make_surface(frame)
+    #if cv2.waitKey(1) & 0xFF == ord('q'):
+    #        break
 
 video = np.stack([get_frame(webcam) for _ in range(50)])
 out_obj = mutate_video(video, width, height, out_obj)
