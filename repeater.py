@@ -7,9 +7,10 @@ from pygame.locals import *
 SAVE = None
 THRESHOLD_VAL = 170
 N_SECTIONS = 3
-FRAMES = 50
+MAX_N_FRAMES = 1000 # This should be longer than the loop you want, but too long may degrade performance.
 ALPHA = 0.5
 ACTIVE = [True, True, True]
+
 
 def get_frame(webcam):
     ret, frame = webcam.read()
@@ -67,34 +68,39 @@ def noisy(noise_typ, image):
         return noisy
 
 
-def mutate_video(width, height, out=None):
+def mutate_video(video, original_video, out=None):
+    cutoffs = [int(np.floor(i / N_SECTIONS * width))
+               for i in range(N_SECTIONS + 1)]
+
     # Capture original video
-    original_video = np.expand_dims(get_frame(webcam), 0)
-    print(original_video.shape)
-    video_list = []
+    #original_video = np.expand_dims(get_frame(webcam), 0)
+
+    #video_list = []
+    nframes = 0
     while True:
         #np.stack([get_frame(webcam) for _ in range(FRAMES)])
         frame = get_frame(webcam)
         display_frame(frame)
+        original_video[nframes] = frame
+        video[nframes] = frame
         #original_video = np.append(original_video, np.expand_dims(frame, 0), axis=0)
-        video_list.append(frame)
+        #video_list.append(frame)
+        nframes += 1
 
         def wait_for_space():
             for event in pygame.event.get():
                 if event.type == KEYDOWN and event.key == pygame.K_SPACE:
                     return True
             return False
-
         if wait_for_space():
             break
 
     # nframes = original_video.shape[0]
-    nframes = len(video_list)
-    original_video = np.stack(video_list, 0)
+    #nframes = len(video_list)
+    #original_video = np.stack(video_list, 0)
     # original_video = np.stack([get_frame(webcam) for _ in range(FRAMES)])
-    video = original_video.copy()
-    cutoffs = [int(np.floor(i / N_SECTIONS * width))
-               for i in range(N_SECTIONS + 1)]
+
+
     while True:
         for t in range(nframes):
             next_frame = get_frame(webcam)
@@ -119,6 +125,7 @@ def mutate_video(width, height, out=None):
 
             for event in pygame.event.get():
                 if event.type == KEYDOWN and event.key == pygame.K_SPACE:
+                    print("run ended!")
                     return 0
                 for i, key in enumerate([pygame.K_3, pygame.K_2, pygame.K_1]):
                     if event.type == KEYDOWN and event.key == key:
@@ -126,13 +133,15 @@ def mutate_video(width, height, out=None):
                         ACTIVE[i] = not ACTIVE[i]
                         print(ACTIVE)
 
+    return 1 # Execution shouldn't get to here
+
 
 def display_frame(frame):
-    screen.fill([0,0,0])
+    screen.fill([0, 0, 0])
     frame = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_BGR2RGB)
     frame = np.rot90(frame)
     frame = pygame.surfarray.make_surface(frame)
-    screen.blit(frame, (0,0))
+    screen.blit(frame, (0, 0))
     pygame.display.update()
 
 webcam = cv2.VideoCapture(0)
@@ -160,22 +169,14 @@ def initial_run():
             if event.type == KEYDOWN and event.key == pygame.K_SPACE:
                 return 0
 
+
+# Do expensive setup (creating big arrays) FIRST
+first_frame = get_frame(webcam)
+original_video_zeros = np.zeros([MAX_N_FRAMES] + list(first_frame.shape), dtype=np.uint8)
+video_zeros = np.zeros([MAX_N_FRAMES] + list(first_frame.shape), dtype=np.uint8)
+
 initial_run()
-print("run ok")
+print("Initial run ok.")
 
-
-out_obj = mutate_video(width, height, out_obj)
-
-
-"""frame = (frame + next_frame)/2.0
-# frame = next_frame
-
-
-print(np.mean(frame), np.mean(next_frame))
-
-# Our operations on the frame come here
-#gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-# Display the resulting frame
-cv2.imshow('frame', frame)
-#print(gray)"""
+out_obj = mutate_video(video_zeros, original_video_zeros, out_obj)
+print("Exiting...")
