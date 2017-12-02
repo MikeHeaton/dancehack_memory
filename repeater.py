@@ -140,6 +140,7 @@ def display_frame(frame):
     screen.fill([0, 0, 0])
     frame = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_BGR2RGB)
     frame = np.rot90(frame)
+    frame = np.flip(frame, 0)
     frame = pygame.surfarray.make_surface(frame)
     screen.blit(frame, (0, 0))
     pygame.display.update()
@@ -162,7 +163,6 @@ else:
 def initial_run():
     while True:
         frame = get_frame(webcam)
-
         display_frame(frame)
 
         for event in pygame.event.get():
