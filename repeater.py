@@ -4,11 +4,15 @@ import time
 import pygame
 from pygame.locals import *
 
+# weidong@kinevis.com
 SAVE = None
-THRESHOLD_VAL = 170
+#SAVE = time.strftime("%Y-%m-%d-%H-%M-%S", time.gmtime())
+print(SAVE)
+THRESHOLD_VAL = 100
 N_SECTIONS = 3
-MAX_N_FRAMES = 1000 # This should be longer than the loop you want, but too long may degrade performance.
-ALPHA = 0.5
+MAX_N_FRAMES = 1000  # This should be longer than the loop you want,
+                     # but too long may degrade performance.
+ALPHA = 1.0
 ACTIVE = [True, True, True]
 
 
@@ -18,15 +22,28 @@ def get_frame(webcam):
                              THRESHOLD_VAL, 255,
                              cv2.THRESH_BINARY)"""
 
-    #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     return frame
 
 
 def combine(old_frame, new_frame):
+    gray_image = cv2.cvtColor(new_frame, cv2.COLOR_BGR2GRAY)
+    _, thresholded_image = cv2.threshold(gray_image,
+                                         THRESHOLD_VAL, 255,
+                                         cv2.THRESH_BINARY_INV)
+    kernel = np.ones((5,5),np.uint8)
+    mask = cv2.morphologyEx(thresholded_image, cv2.MORPH_OPEN, kernel)
+    mask_inv = cv2.bitwise_not(mask)
 
-    #new_frame = noisy("s&p", new_frame).astype(np.uint8)
-    #return cv2.addWeighted(new_frame, alpha, old_frame, 1-alpha, 0.0)
-    return cv2.addWeighted(old_frame, 1-ALPHA, new_frame, ALPHA, 0.0)
+    old_img_fg = (1-ALPHA) * old_frame + ALPHA * cv2.bitwise_and(old_frame,old_frame,mask = mask_inv)
+    new_img_fg = ALPHA * cv2.bitwise_and(new_frame,new_frame,mask = mask)
+
+    #masked_image = cv2.bitwise_and(new_frame, new_frame,mask=mask)
+
+    #return np.stack([mask]*3, 2)
+    return old_img_fg + new_img_fg
+    #return cv2.addWeighted(old_frame, 1-ALPHA, masked_image, ALPHA, 0.0)
+    # return cv2.addWeighted(old_frame, 1-ALPHA, new_frame, ALPHA, 0.0)
+
 
 def noisy(noise_typ, image):
     if noise_typ == "gauss":
@@ -72,19 +89,12 @@ def mutate_video(video, original_video, out=None):
     cutoffs = [int(np.floor(i / N_SECTIONS * width))
                for i in range(N_SECTIONS + 1)]
 
-    # Capture original video
-    #original_video = np.expand_dims(get_frame(webcam), 0)
-
-    #video_list = []
     nframes = 0
     while True:
-        #np.stack([get_frame(webcam) for _ in range(FRAMES)])
         frame = get_frame(webcam)
-        display_frame(frame)
+        display_frame(frame, out)
         original_video[nframes] = frame
         video[nframes] = frame
-        #original_video = np.append(original_video, np.expand_dims(frame, 0), axis=0)
-        #video_list.append(frame)
         nframes += 1
 
         def wait_for_space():
@@ -94,12 +104,6 @@ def mutate_video(video, original_video, out=None):
             return False
         if wait_for_space():
             break
-
-    # nframes = original_video.shape[0]
-    #nframes = len(video_list)
-    #original_video = np.stack(video_list, 0)
-    # original_video = np.stack([get_frame(webcam) for _ in range(FRAMES)])
-
 
     while True:
         for t in range(nframes):
@@ -112,16 +116,13 @@ def mutate_video(video, original_video, out=None):
                     part_new_frame = next_frame[:, cutoffs[i]: cutoffs[i+1]]
 
                     this_bit = combine(part_old_frame, part_new_frame)
-                    frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = video[t, :, cutoffs[i]: cutoffs[i+1]]
                     video[t, :, cutoffs[i]: cutoffs[i+1]] = this_bit
+                    frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = video[t, :, cutoffs[i]: cutoffs[i+1]]
 
                 else:
                     frame_to_display[:, cutoffs[i]: cutoffs[i+1]] = original_video[t, :, cutoffs[i]: cutoffs[i+1]]
-            # video[t] = combine(video[t], next_frame)
-            display_frame(frame_to_display)
 
-            if out:
-                out.write(frame_to_display)
+            display_frame(frame_to_display, out)
 
             for event in pygame.event.get():
                 if event.type == KEYDOWN and event.key == pygame.K_SPACE:
@@ -133,17 +134,21 @@ def mutate_video(video, original_video, out=None):
                         ACTIVE[i] = not ACTIVE[i]
                         print(ACTIVE)
 
-    return 1 # Execution shouldn't get to here
+    return 1  # Execution shouldn't get to here
 
 
-def display_frame(frame):
+def display_frame(frame, out_obj):
     screen.fill([0, 0, 0])
     frame = cv2.cvtColor(frame.astype(np.uint8), cv2.COLOR_BGR2RGB)
     frame = np.rot90(frame)
     frame = np.flip(frame, 0)
-    frame = pygame.surfarray.make_surface(frame)
-    screen.blit(frame, (0, 0))
+    surface = pygame.surfarray.make_surface(frame)
+    screen.blit(surface, (0, 0))
     pygame.display.update()
+
+    if out_obj:
+        out_obj.write(frame)
+
 
 webcam = cv2.VideoCapture(0)
 pygame.init()
@@ -152,18 +157,18 @@ screen = pygame.display.set_mode([1280,720], pygame.FULLSCREEN)
 
 img = get_frame(webcam)
 height, width, depth = img.shape
-fourcc = cv2.VideoWriter_fourcc(*'XVID')
 
 if SAVE:
-    out_obj = cv2.VideoWriter(SAVE, fourcc, 20.0, (width, height),
-                              isColor=False)
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    out_obj = cv2.VideoWriter(SAVE + ".avi", fourcc, 20.0, (720, 1280))
 else:
     out_obj = None
+
 
 def initial_run():
     while True:
         frame = get_frame(webcam)
-        display_frame(frame)
+        display_frame(frame, None)
 
         for event in pygame.event.get():
             if event.type == KEYDOWN and event.key == pygame.K_SPACE:
